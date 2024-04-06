@@ -116,9 +116,6 @@ public class BasicNPCAI : MonoBehaviour
                 }
             }
         }
-        // If the code gets to this point, something has gone wrong.
-        // The pathfinding algorithm is incomplete or the player is in
-        // an area unaccessible without special movement.
         return new Vector3(0,0,0);
     }
 
