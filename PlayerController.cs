@@ -4,31 +4,35 @@ using UnityEngine;
 
 public class PlayerController : MonoBehaviour
 {
-    [SerializeField] float frictionMultiplier;
+    public float frictionMultiplier;
+    [SerializeField] float boostPower;
     public Vector3 Vel;
     public float playerSpeed;
     [SerializeField] float ogGravVal;
-    private float gravVal;
+    public float gravVal;
     private bool slamming = false;
-    public float jumpPower;
-    public float jetpackGravity;
+    [SerializeField] float jumpPower;
+    [SerializeField] float jetpackGravity;
     public float areaDensity = 1.22f;
     public float slammingVel;
     public float frictionCoefficient = 1f;
-    public float wasdSpeed;
-    public float maxWasdSpeed;
-    public float maxSlideSpeed;
+    [SerializeField] float wasdSpeed;
+    [SerializeField] float maxWasdSpeed;
+    [SerializeField] float maxSlideSpeed;
     private bool sliding = false;
     private bool outOfSlide = false;
     private bool canBoost = false;
-    [SerializeField] float dragCoefficient = .59f;
-    [SerializeField] float mass = 30;
+    public float dragCoefficient = .59f;
+    public float mass = 30;
     [SerializeField] float rotation;
+    [SerializeField] float outOfSlideWindow;
+    [SerializeField] float fastWasdSpeed;
     [SerializeField] GameObject plat;
     // Update is called once per frame
     void Update()
     {
         CharacterController charCol = GetComponent<CharacterController>();
+
         if (charCol.isGrounded){
             // Jump
             if (Input.GetKeyDown(KeyCode.Space)) {
@@ -49,7 +53,7 @@ public class PlayerController : MonoBehaviour
             else{
                 if (sliding == true){
                     sliding = false;
-                    StartCoroutine(outOfSlideFunc(0.5f));
+                    StartCoroutine(outOfSlideFunc());
                 }
             }
             // Backflip
@@ -65,7 +69,6 @@ public class PlayerController : MonoBehaviour
             }
             slamming = false;
             canBoost = true;
-            print("touching ground");
         }
         else{
             if (Input.GetKeyDown(KeyCode.LeftControl)){
@@ -80,10 +83,8 @@ public class PlayerController : MonoBehaviour
             }
             // Mid-air boost
             if (Input.GetKeyDown(KeyCode.LeftShift) && canBoost){
-                print(Vel);
-                Vel += (transform.forward + transform.up) * 10;
+                Vel += (transform.forward + transform.up) * boostPower;
                 canBoost = false;
-                print(Vel);
             }
         }
         // Turning
@@ -105,26 +106,31 @@ public class PlayerController : MonoBehaviour
                 Vel.z = added.z * 3;
             }
         }else{
-            Vel += Input.GetAxis("Horizontal") * transform.right * wasdSpeed * 0.05f;
-            Vel += Input.GetAxis("Vertical") * transform.forward * wasdSpeed * 0.05f;
+            Vel += Input.GetAxis("Horizontal") * transform.right * fastWasdSpeed;
+            Vel += Input.GetAxis("Vertical") * transform.forward * fastWasdSpeed;
         }
         // Make a platform
         if (Input.GetKeyDown(KeyCode.Z)){
             GameObject Plat = Instantiate(plat);
             Plat.transform.position = transform.position + (transform.forward * 4);
         }
+    
+        // check if slow enough to stop, which is when calculating friction would make it negative.
         if (Mathf.Min(Vel.magnitude, gravVal * frictionCoefficient * -1 * Time.deltaTime) == Vel.magnitude){
             Vel -= Vel;
         }
         else{
+            // uses the actual friction formula, F = μN
             Vel -= Vel.normalized * gravVal * frictionCoefficient * frictionMultiplier * -1 * Time.deltaTime;
         }
+        // air resistance
+        
+        Vel -= (((areaDensity * (Vel * Vel.magnitude) * (charCol.height * charCol.radius) * dragCoefficient)/2)/mass) * Time.deltaTime;
         // check for terminal velocity then apply gravity and air resistance
         if (Vel.y > -33)
         {
+            // applying gravity
             Vel.y += (gravVal * Time.deltaTime * 2);
-            // air resistance
-            Vel.y += (((areaDensity * Vel.y * Vel.y * (charCol.height * charCol.radius) * dragCoefficient)/2)/mass) * Time.deltaTime;
         }
         if (slamming){
             Vel.y = slammingVel;
@@ -138,9 +144,9 @@ public class PlayerController : MonoBehaviour
         }
     }
     // wait to enable the jetpac
-    private IEnumerator outOfSlideFunc(float w){
+    private IEnumerator outOfSlideFunc(){
         outOfSlide = true;
-        yield return new WaitForSeconds(w);
+        yield return new WaitForSeconds(outOfSlideWindow);
         outOfSlide = false;
     }
 }
