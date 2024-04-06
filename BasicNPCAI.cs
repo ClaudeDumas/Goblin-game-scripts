@@ -52,6 +52,18 @@ public class BasicNPCAI : MonoBehaviour
         }
     }
 
+    bool MovableInThatDirection(Vector3 direction)
+    {
+        CharacterController charCon = GetComponentInParent<CharacterController>();
+        RaycastHit hit;
+        if (Physics.Raycast(transform.position, direction, out hit, charCon.radius * 2) == false)
+        {
+            return true;
+        }
+        RaycastHit hit2;
+        return false;   
+    }
+
     Vector3 Pathing()
     {
         // "Enemy" here refers to whoever the npc is against. 
@@ -116,18 +128,22 @@ public class BasicNPCAI : MonoBehaviour
                 }
             }
         }
+        // If the code gets to this point, something has gone wrong.
+        // The pathfinding algorithm is incomplete or the player is in
+        // an area unaccessible without special movement.
         return new Vector3(0,0,0);
     }
 
     GameObject CloserPlayer(Vector3 origin)
     {
         if (targets.Count > 1){
-            GameObject final = null;
+            GameObject final;
             for (int i = 1; i < targets.Count; i++)
             {
                 if (MaxVector3(targets[i].transform.position - transform.position, targets[i-1].transform.position - transform.position) == targets[i].transform.position - transform.position)
                 {
                     final = targets[i];
+                    chosenTarget = targets[i];
                 }
             }
             return final;
@@ -144,3 +160,4 @@ public class BasicNPCAI : MonoBehaviour
         return b;
     }
 }
+
