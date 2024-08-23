@@ -1,6 +1,8 @@
 using System.Collections;
 using System.Collections.Generic;
+using System.Security.Cryptography.X509Certificates;
 using UnityEngine;
+using UnityEngine.AI;
 
 public class NavMeshing : MonoBehaviour
 {
@@ -16,25 +18,22 @@ public class NavMeshing : MonoBehaviour
     [SerializeField] float radius;
     [SerializeField] float jumpDistance;
     [SerializeField] bool addCubes;
-    List<List<Point>> pointRows = new List<List<Point>>();
+    List<List<List<Point>>> pointRows = new List<List<List<Point>>>();
     void Start()
     {
-        // look down from the inputted origin point to make a point that is 
-        // the perfect distance from a flat surface 
-        Point old = new Point();
-
         // in each column and row according to the x bounds and tile size, make a point
-        // everywhere the player can stand.
+        // everywhere the player can stand. This includes everywhere in a y column.
         for (float i = 0; i < xBound/tileSize; i++)
         {
-            List<Point> row = new List<Point>();
+            List<List<Point>> row = new List<List<Point>>();
             for (float j = 0; j < zBound/tileSize; j++)
             {
                 RaycastHit[] hits = Physics.RaycastAll(StartPoint + new Vector3(tileSize * i, 99999, tileSize * j), new Vector3(0, -1, 0), Mathf.Infinity);
+                List<Point> yCol = new List<Point>();
                 foreach (RaycastHit repeatedHit in hits)
                 {
                     Vector3 capsuleLoc = repeatedHit.point + (repeatedHit.normal * ((height/2) + 0.001f));
-                    if ((Physics.OverlapCapsule(capsuleLoc + new Vector3(0, (height/2) - radius, 0), capsuleLoc - new Vector3(0, (height/2) - radius, 0), radius)).Length == 0 && capsuleLoc.y < upperYBound && capsuleLoc.y > lowerYBound)
+                    if (Physics.OverlapCapsule(capsuleLoc + new Vector3(0, (height/2) - radius, 0), capsuleLoc - new Vector3(0, (height/2) - radius, 0), radius).Length == 0 && capsuleLoc.y < upperYBound && capsuleLoc.y > lowerYBound)
                     {
                         if (addCubes)
                         {
@@ -44,79 +43,67 @@ public class NavMeshing : MonoBehaviour
                         }
                         Point newPoint = new Point();
                         newPoint.set(capsuleLoc);
-                        row.Add(newPoint);
+                        yCol.Add(newPoint);
                     }
                 }
+                row.Add(yCol);
             }
             pointRows.Add(row);
         }
+        // to solve the issue of layers, offset i and j
+        // To solve the issue of moving platforms, make a point's position actually relative to the hit's object.
+        // Also make it so that when it moves it changes the connections based on what can jump to it.
         for (int i = 0; i < pointRows.Count; i++)
         {
             for (int j = 0; j < pointRows[i].Count; j++)
             {
-                Point subjectPoint = pointRows[i][j];
-                // check if there's something in the way of two orthagonal points (like where the king can move in chess but not like the queen)
-                for (int k = 0; k < 9; k++)
+                foreach (Point subjectPoint in pointRows[i][j])
                 {
-                    // when at the lower and upper bounds of x and z on the navmesh, keeps this from accessing nonexistent points.
-                    float pRow = Mathf.Clamp(i + 1 - k % 3, 0, pointRows.Count - 1);
-                    float pCol = Mathf.Clamp(j + 1 - k % 3, 0, pointRows[i].Count - 1);
-                    print("pRow:" + (int)pRow + "pCol: " + (int)pCol);
-                    print(pointRows[i].Count);
-                    Point connectPoint = pointRows[(int)pRow][(int)pCol];
-                    // using rHit instead of just hit because "height" is already taking up name space
-                    if (!Physics.Raycast(subjectPoint.get(), (connectPoint.get() - subjectPoint.get()), (connectPoint.get() - subjectPoint.get()).magnitude) && Vector3.Angle(subjectPoint.get(), connectPoint.get()) < maxSlope)
+
+                    // check if there's something in the way of two orthagonal points (like where the king can move in chess but not like the queen)
+                    for (int k = 0; k < 9; k++)
                     {
-                        if (Vector3.Angle(subjectPoint.get(), connectPoint.get()) < -maxSlope)
-                        {
-                            subjectPoint.addConnection(connectPoint, navmeshConnectionType.Fall);
-                        }
-                        else
-                        {
-                            subjectPoint.addConnection(connectPoint, navmeshConnectionType.Normal);
-                        }
-                        Debug.DrawLine(subjectPoint.get(), connectPoint.get(), Color.white);
-                    }
-                    else
-                    {
-                        // makes an exception if the two points can be connected by a step
-                        if (subjectPoint.get().y < connectPoint.get().y)
-                        {
-                            Vector3 yMirror = subjectPoint.get() - new Vector3(0,subjectPoint.get().y,0) + new Vector3(0, connectPoint.get().y, 0);
-                            if (!Physics.Raycast(yMirror, connectPoint.get() - yMirror, (connectPoint.get() - yMirror).magnitude) && (connectPoint.get().y - subjectPoint.get().y) <= stepSize)
+                        // when at the lower and upper bounds of x and z on the navmesh, keeps this from accessing nonexistent points.
+                        float pRow = Mathf.Clamp(i + 1 - k % 3, 0, pointRows.Count - 1);
+                        float pCol = Mathf.Clamp(j + 1 - k % 3, 0, pointRows[i].Count - 1);
+                        // i = 1, j = 139
+                        print("pRow:" + (int)pRow + "pCol: " + (int)pCol);
+                        print(pointRows[i].Count);
+                        for (int l = 0; l < pointRows[(int)pRow][(int)pCol].Count; l++){
+
+                            Point connectPoint = pointRows[(int)pRow][(int)pCol][l];
+                            // using rHit instead of just hit because "height" is already taking up name space
+                            if (!Physics.Raycast(subjectPoint.get(), (connectPoint.get() - subjectPoint.get()), (connectPoint.get() - subjectPoint.get()).magnitude) && Vector3.Angle(subjectPoint.get(), connectPoint.get()) < maxSlope)
                             {
-                                subjectPoint.addConnection(connectPoint, navmeshConnectionType.Step);
+                                if (Vector3.Angle(subjectPoint.get(), connectPoint.get()) < -maxSlope)
+                                {
+                                    subjectPoint.addConnection(connectPoint, navmeshConnectionType.Fall);
+                                }
+                                else
+                                {
+                                    subjectPoint.addConnection(connectPoint, navmeshConnectionType.Normal);
+                                }
                                 Debug.DrawLine(subjectPoint.get(), connectPoint.get(), Color.white);
+                            }
+                            else
+                            {
+                                // makes an exception if the two points can be connected by a step
+                                if (subjectPoint.get().y < connectPoint.get().y)
+                                {
+                                    Vector3 yMirror = subjectPoint.get() - new Vector3(0,subjectPoint.get().y,0) + new Vector3(0, connectPoint.get().y, 0);
+                                    if (!Physics.Raycast(yMirror, connectPoint.get() - yMirror, (connectPoint.get() - yMirror).magnitude) && (connectPoint.get().y - subjectPoint.get().y) <= stepSize)
+                                    {
+                                        subjectPoint.addConnection(connectPoint, navmeshConnectionType.Step);
+                                        Debug.DrawLine(subjectPoint.get(), connectPoint.get(), Color.white);
+                                    }
+                                }
                             }
                         }
                     }
                 }
             }
         }
-        // removes all points that are just part of a flat surface by checking if all connections are at a flat angle.
-        // need to make it except points that are part of an edge or not except points in the middle of a slope.
-        for (int i = 0; i < pointRows.Count; i++)
-        {
-            print("getting connections");
-            for (int j = 0; j < pointRows[i].Count; j++)
-            {
-                Point subjectPoint = pointRows[i][j];
-                bool removable = true;
-                for (int m = 0; m < subjectPoint.getConnections().Count; m++)
-                {
-                    print("getting connections2");
-                    if (Vector3.Angle(subjectPoint.getConnections()[m].get(), subjectPoint.get()) != 0)
-                    {
-                        removable = false;
-                        break;
-                    }
-                }
-                if (removable == true)
-                {
-                    pointRows[i].Remove(subjectPoint);
-                }
-            }
-        }
+        // find a way to simplify the navmesh
     }
 }
 
