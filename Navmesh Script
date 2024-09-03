@@ -57,44 +57,61 @@ public class NavMeshing : MonoBehaviour
         {
             for (int j = 0; j < pointRows[i].Count; j++)
             {
-                foreach (Point subjectPoint in pointRows[i][j])
+                for (int p = 0; p < pointRows[i][j].Count; p++)
                 {
-
+                    Point subjectPoint = pointRows[i][j][p];
                     // check if there's something in the way of two orthagonal points (like where the king can move in chess but not like the queen)
                     for (int k = 0; k < 9; k++)
                     {
                         // when at the lower and upper bounds of x and z on the navmesh, keeps this from accessing nonexistent points.
-                        float pRow = Mathf.Clamp(i + 1 - k % 3, 0, pointRows.Count - 1);
+                        float pRow = Mathf.Clamp(i + 1 - ((k / 3) - (k / 3 % 1)), 0, pointRows.Count - 1);
                         float pCol = Mathf.Clamp(j + 1 - k % 3, 0, pointRows[i].Count - 1);
-                        // i = 1, j = 139
-                        print("pRow:" + (int)pRow + "pCol: " + (int)pCol);
-                        print(pointRows[i].Count);
+                        // for accessing everything in a column of points, because using raycastAll means there's columns of points to access.
                         for (int l = 0; l < pointRows[(int)pRow][(int)pCol].Count; l++){
 
                             Point connectPoint = pointRows[(int)pRow][(int)pCol][l];
-                            // using rHit instead of just hit because "height" is already taking up name space
-                            if (!Physics.Raycast(subjectPoint.get(), (connectPoint.get() - subjectPoint.get()), (connectPoint.get() - subjectPoint.get()).magnitude) && Vector3.Angle(subjectPoint.get(), connectPoint.get()) < maxSlope)
+                            if (connectPoint == subjectPoint){
+                                continue;
+                            }
+                            // degrees from the point the subject is connecting to and the subject.
+                            // Atan2(difference in y between the two points, difference in xz between the two points)
+                            float atanX = Mathf.Sqrt(Mathf.Pow(connectPoint.get().x - subjectPoint.get().x, 2) + Mathf.Pow(connectPoint.get().z - subjectPoint.get().z, 2));
+                            float deg = Mathf.Atan2(connectPoint.get().y - subjectPoint.get().y, atanX) * Mathf.Rad2Deg;
+                            // using rHit instead of just hit because "height" is already taking up name space and it autocorrects to that
+                            if (!Physics.Raycast(subjectPoint.get(), connectPoint.get() - subjectPoint.get(), (connectPoint.get() - subjectPoint.get()).magnitude) &&  deg < maxSlope)
                             {
-                                if (Vector3.Angle(subjectPoint.get(), connectPoint.get()) < -maxSlope)
+
+                                // checking to see if you can go down to the connection but not up from it, reference other comments for how the script checks for a connection like that.
+                                Vector3 yMirror = subjectPoint.get() - new Vector3(0,subjectPoint.get().y,0) + new Vector3(0, connectPoint.get().y, 0);
+                                // something is wrong with the second part of this if
+                                if (deg >= -maxSlope || (!Physics.Raycast(yMirror, connectPoint.get() - yMirror, (connectPoint.get() - yMirror).magnitude) && Mathf.Abs((connectPoint.get().y - subjectPoint.get().y)) <= stepSize))
                                 {
-                                    subjectPoint.addConnection(connectPoint, navmeshConnectionType.Fall);
+                                    subjectPoint.addConnection(connectPoint, navmeshConnectionType.Normal);
+                                    Debug.DrawLine(subjectPoint.get(), connectPoint.get(), Color.white, Mathf.Infinity);
                                 }
                                 else
                                 {
-                                    subjectPoint.addConnection(connectPoint, navmeshConnectionType.Normal);
+                                    subjectPoint.addConnection(connectPoint, navmeshConnectionType.Fall);
+                                    print("falling.");
+                                    Debug.DrawLine(subjectPoint.get(), connectPoint.get(), Color.red, Mathf.Infinity);
                                 }
-                                Debug.DrawLine(subjectPoint.get(), connectPoint.get(), Color.white);
                             }
                             else
                             {
                                 // makes an exception if the two points can be connected by a step
-                                if (subjectPoint.get().y < connectPoint.get().y)
+                                // possible issue if the area for the step is actually too small to be on
+                                // however, that's able to be built around and won't come up if the point density isn't too big
+                                // so it's not worth the processing power.
+                                if (subjectPoint.get().y < connectPoint.get().y && (connectPoint.get().y - subjectPoint.get().y) <= stepSize)
                                 {
+                                    // y mirror is a variable that represents subjectpoint's position but at the same y as connectpoint's.
+                                    // this is to get around steps that can be stepped up but not raycasted through
                                     Vector3 yMirror = subjectPoint.get() - new Vector3(0,subjectPoint.get().y,0) + new Vector3(0, connectPoint.get().y, 0);
-                                    if (!Physics.Raycast(yMirror, connectPoint.get() - yMirror, (connectPoint.get() - yMirror).magnitude) && (connectPoint.get().y - subjectPoint.get().y) <= stepSize)
+                                    if (!Physics.Raycast(yMirror, connectPoint.get() - yMirror, (connectPoint.get() - yMirror).magnitude))
                                     {
+                                        print("Step: " + subjectPoint.get());
                                         subjectPoint.addConnection(connectPoint, navmeshConnectionType.Step);
-                                        Debug.DrawLine(subjectPoint.get(), connectPoint.get(), Color.white);
+                                        Debug.DrawLine(subjectPoint.get(), connectPoint.get(), Color.green);
                                     }
                                 }
                             }
