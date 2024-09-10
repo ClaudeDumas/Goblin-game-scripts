@@ -1,8 +1,11 @@
 using System.Collections;
 using System.Collections.Generic;
+using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
+using UnityEditor;
 using UnityEngine;
 using UnityEngine.AI;
+using UnityEngine.iOS;
 
 public class NavMeshing : MonoBehaviour
 {
@@ -33,17 +36,24 @@ public class NavMeshing : MonoBehaviour
                 foreach (RaycastHit repeatedHit in hits)
                 {
                     Vector3 capsuleLoc = repeatedHit.point + (repeatedHit.normal * ((height/2) + 0.001f));
+                    // if there was a point there, would it overlap with anything?
                     if (Physics.OverlapCapsule(capsuleLoc + new Vector3(0, (height/2) - radius, 0), capsuleLoc - new Vector3(0, (height/2) - radius, 0), radius).Length == 0 && capsuleLoc.y < upperYBound && capsuleLoc.y > lowerYBound)
                     {
+                        Point newPoint = new Point();
+                        // need to switch capsuleLoc to repeatedHit.point + neg reciprocal of normal.
+                        if (VectorAngle(capsuleLoc, repeatedHit.point) < maxSlope && VectorAngle(capsuleLoc, repeatedHit.point) > -maxSlope){
+                            newPoint.set(capsuleLoc, pointType.Standable);
+                        }
+                        else{
+
+                        }
+                        yCol.Add(newPoint);
                         if (addCubes)
                         {
                             GameObject representativeCube = GameObject.CreatePrimitive(PrimitiveType.Cube);
                             representativeCube.transform.position = capsuleLoc;
                             representativeCube.transform.localScale = new Vector3(0.5f, 0.5f, 0.5f);
                         }
-                        Point newPoint = new Point();
-                        newPoint.set(capsuleLoc);
-                        yCol.Add(newPoint);
                     }
                 }
                 row.Add(yCol);
@@ -74,17 +84,17 @@ public class NavMeshing : MonoBehaviour
                                 continue;
                             }
                             // degrees from the point the subject is connecting to and the subject.
-                            // Atan2(difference in y between the two points, difference in xz between the two points)
-                            float atanX = Mathf.Sqrt(Mathf.Pow(connectPoint.get().x - subjectPoint.get().x, 2) + Mathf.Pow(connectPoint.get().z - subjectPoint.get().z, 2));
-                            float deg = Mathf.Atan2(connectPoint.get().y - subjectPoint.get().y, atanX) * Mathf.Rad2Deg;
+                            // distance formula for x and z instead of x and y to find the x of the plane I'm checking the angle on.
+                            // for the y of the plane it's just the y of both angles.
+                            float deg = Mathf.Atan2(connectPoint.get().y - subjectPoint.get().y, Mathf.Sqrt(Mathf.Pow(connectPoint.get().x - subjectPoint.get().x, 2) + Mathf.Pow(connectPoint.get().z - subjectPoint.get().z, 2))) * Mathf.Rad2Deg;
                             // using rHit instead of just hit because "height" is already taking up name space and it autocorrects to that
-                            if (!Physics.Raycast(subjectPoint.get(), connectPoint.get() - subjectPoint.get(), (connectPoint.get() - subjectPoint.get()).magnitude) &&  deg < maxSlope)
+                            if (!Physics.CapsuleCast(subjectPoint.get() - new Vector3(0, height/2, 0), subjectPoint.get() + new Vector3(0, height/2, 0), radius, connectPoint.get() - subjectPoint.get(), (connectPoint.get() - subjectPoint.get()).magnitude) &&  deg < maxSlope)
                             {
 
                                 // checking to see if you can go down to the connection but not up from it, reference other comments for how the script checks for a connection like that.
                                 Vector3 yMirror = subjectPoint.get() - new Vector3(0,subjectPoint.get().y,0) + new Vector3(0, connectPoint.get().y, 0);
                                 // something is wrong with the second part of this if
-                                if (deg >= -maxSlope || (!Physics.Raycast(yMirror, connectPoint.get() - yMirror, (connectPoint.get() - yMirror).magnitude) && Mathf.Abs((connectPoint.get().y - subjectPoint.get().y)) <= stepSize))
+                                if (deg >= -maxSlope || (!Physics.Raycast(yMirror, connectPoint.get() - yMirror, (connectPoint.get() - yMirror).magnitude) && Mathf.Abs(connectPoint.get().y - subjectPoint.get().y) <= stepSize))
                                 {
                                     subjectPoint.addConnection(connectPoint, navmeshConnectionType.Normal);
                                     Debug.DrawLine(subjectPoint.get(), connectPoint.get(), Color.white, Mathf.Infinity);
@@ -92,26 +102,41 @@ public class NavMeshing : MonoBehaviour
                                 else
                                 {
                                     subjectPoint.addConnection(connectPoint, navmeshConnectionType.Fall);
-                                    print("falling.");
+                                    //print("falling.");
                                     Debug.DrawLine(subjectPoint.get(), connectPoint.get(), Color.red, Mathf.Infinity);
                                 }
                             }
                             else
                             {
-                                // makes an exception if the two points can be connected by a step
-                                // possible issue if the area for the step is actually too small to be on
-                                // however, that's able to be built around and won't come up if the point density isn't too big
-                                // so it's not worth the processing power.
-                                if (subjectPoint.get().y < connectPoint.get().y && (connectPoint.get().y - subjectPoint.get().y) <= stepSize)
-                                {
-                                    // y mirror is a variable that represents subjectpoint's position but at the same y as connectpoint's.
+                                // I take back the thing about steps being too small, I was wrong.
+
+                                // y mirror is a variable that represents subjectpoint's position but at the same y as connectpoint's.
                                     // this is to get around steps that can be stepped up but not raycasted through
-                                    Vector3 yMirror = subjectPoint.get() - new Vector3(0,subjectPoint.get().y,0) + new Vector3(0, connectPoint.get().y, 0);
-                                    if (!Physics.Raycast(yMirror, connectPoint.get() - yMirror, (connectPoint.get() - yMirror).magnitude))
-                                    {
-                                        print("Step: " + subjectPoint.get());
+                                Vector3 yMirror = subjectPoint.get() - new Vector3(0,subjectPoint.get().y,0) + new Vector3(0, connectPoint.get().y, 0);
+                                RaycastHit hit;
+                                if (
+                                    subjectPoint.get().y < connectPoint.get().y 
+                                    && (connectPoint.get().y - subjectPoint.get().y) <= stepSize
+                                    // First, cast the hitbox up to check if there's nothing in the way of going up.
+                                    && !Physics.CapsuleCast(subjectPoint.get() + new Vector3(0, height/2, 0), subjectPoint.get() - new Vector3(0, height/2, 0), radius, yMirror - subjectPoint.get(), (yMirror - subjectPoint.get()).magnitude)
+                                    // Second, cast the hitbox to the other point to see if there's nothing in the way of going forward.
+                                    && !Physics.CapsuleCast(yMirror + new Vector3(0, height/2, 0), yMirror - new Vector3(0, height/2, 0), radius, connectPoint.get() - yMirror, (connectPoint.get() - yMirror).magnitude)
+                                )
+                                {
+                                    // Third, check if there's anything in the way downward (This would mean it's on a slope)
+                                    if (Physics.CapsuleCast(connectPoint.get() + new Vector3(0, height/2, 0), connectPoint.get() - new Vector3(0, height/2, 0), radius, Vector3.down, out hit, height/2)){
+                                        // Fourth, get the surface's slope based on the normal and the point made.
+                                        float deg2 = Mathf.Atan2(connectPoint.get().y + (1/hit.normal.y) - connectPoint.get().y, Mathf.Sqrt(Mathf.Pow(connectPoint.get().x + hit.normal.x - connectPoint.get().x, 2) + Mathf.Pow(connectPoint.get().z + hit.normal.z - connectPoint.get().z, 2))) * Mathf.Rad2Deg;
+                                        if (deg2 > -maxSlope && deg2 < maxSlope)
+                                        {
+                                            subjectPoint.addConnection(connectPoint, navmeshConnectionType.Step);
+                                            Debug.DrawLine(subjectPoint.get(), connectPoint.get(), Color.green, Mathf.Infinity);
+                                        }
+                                    }
+                                    else{
+                                        // if not, it's just a step that isn't on a slope.
                                         subjectPoint.addConnection(connectPoint, navmeshConnectionType.Step);
-                                        Debug.DrawLine(subjectPoint.get(), connectPoint.get(), Color.green);
+                                        Debug.DrawLine(subjectPoint.get(), connectPoint.get(), Color.green, Mathf.Infinity);
                                     }
                                 }
                             }
@@ -122,16 +147,20 @@ public class NavMeshing : MonoBehaviour
         }
         // find a way to simplify the navmesh
     }
+    public float VectorAngle(Vector3 to, Vector3 from){
+        return Mathf.Atan2(to.y - from.y, Mathf.Sqrt(Mathf.Pow(to.x - from.x, 2) + Mathf.Pow(to.z - from.z, 2))) * Mathf.Rad2Deg;
+    }
 }
-
 public class Point
 {
     List<PointConnection> ConnectedPoints = new List<PointConnection>();
     public Vector3 Place;
+    public pointType type;
 
-    public void set(Vector3 spot)
+    public void set(Vector3 spot, pointType pT)
     {
         Place = spot;
+        type = pT;
     }
     public Vector3 get()
     {
@@ -148,6 +177,10 @@ public class Point
     {
         return ConnectedPoints;
     }
+}
+public enum pointType{
+    Standable,
+    noStand
 }
 // type of point connection
 public enum navmeshConnectionType
