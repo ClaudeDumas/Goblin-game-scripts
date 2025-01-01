@@ -1,0 +1,86 @@
+using System.Collections;
+using System.Collections.Generic;
+using System.Security.Cryptography.X509Certificates;
+using UnityEngine;
+using UnityEngine.EventSystems;
+
+public class Test : MonoBehaviour
+{
+    [SerializeField] Vector3 originSpot;
+    [SerializeField] float height;
+    [SerializeField] float radius;
+    [SerializeField] float slope;
+    [SerializeField] Vector3 spotCubeSize;
+    private GameObject cube;
+    // Start is called before the first frame update
+    void Start()
+    {
+        cube = GameObject.CreatePrimitive(PrimitiveType.Cube);
+        cube.transform.eulerAngles = new Vector3(slope, 0, 0);
+        cube.transform.position = originSpot - new Vector3(0, cube.transform.localScale.y, 0);
+        cube.transform.localScale = new Vector3(5, 5, 5);
+        // cube.transform.localScale = new Vector3(1, 1, 10);
+        radius = Mathf.Clamp(radius, 0, height/2);
+        RaycastHit hit;
+        Physics.Raycast(originSpot + new Vector3(0, 9999, 0), Vector3.down, out hit, Mathf.Infinity);
+        
+        Mesh localMesh = hit.transform.gameObject.GetComponent<MeshFilter>().mesh;
+        List<Vector3> testVertices = new List<Vector3>();
+        for (int i = 0; i < localMesh.triangles.Length; i += 3){
+            testVertices.Add(localMesh.vertices[localMesh.triangles[i]]);
+            testVertices.Add(localMesh.vertices[localMesh.triangles[i+1]]);
+            testVertices.Add(localMesh.vertices[localMesh.triangles[i+2]]);
+            Vector3 Pos1 = localMesh.vertices[localMesh.triangles[i]];
+            Vector3 Pos2 = localMesh.vertices[localMesh.triangles[i+1]];
+            Vector3 Pos3 = localMesh.vertices[localMesh.triangles[i+2]];
+            Pos1.x *= cube.transform.localScale.x;
+            Pos1.y *= cube.transform.localScale.y;
+            Pos1.z *= cube.transform.localScale.z;
+            Pos2.x *= cube.transform.localScale.x;
+            Pos2.y *= cube.transform.localScale.y;
+            Pos2.z *= cube.transform.localScale.z;
+            Pos3.x *= cube.transform.localScale.x;
+            Pos3.y *= cube.transform.localScale.y;
+            Pos3.z *= cube.transform.localScale.z;
+            Vector3 PosFinal = new Vector3((Pos1.x + Pos2.x + Pos3.x)/3, (Pos1.y + Pos2.y + Pos3.y)/3, (Pos1.z + Pos2.z + Pos3.z)/3);
+            
+            // GameObject x = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            
+            // x.transform.position = cube.transform.position + Pos1 + ((Pos1-PosFinal).normalized*radius);
+            // x.transform.localScale = new Vector3(0.1f, 0.1f, 0.1f);
+            
+
+            GameObject x = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            x.transform.position = cube.transform.position + PosFinal;
+            x.transform.localScale = spotCubeSize;
+            
+            float mult1 = Mathf.Min((PosFinal-Pos1).magnitude, radius);
+            float mult2 = Mathf.Min((PosFinal-Pos2).magnitude, radius);
+            float mult3 = Mathf.Min((PosFinal-Pos3).magnitude, radius);
+            Vector3 inSpot1 = Pos1 + (PosFinal-Pos1).normalized*mult1;
+            GameObject x2 = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            x2.transform.position = cube.transform.position + inSpot1;
+            x2.transform.localScale = spotCubeSize;
+
+            Vector3 inSpot2 = Pos2 + (PosFinal-Pos2).normalized*mult2;
+            GameObject x3 = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            x3.transform.position = cube.transform.position + inSpot2;
+            x3.transform.localScale = spotCubeSize;
+
+            Vector3 inSpot3 = Pos3 + (PosFinal-Pos3).normalized*mult3;
+            GameObject x4 = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            x4.transform.position = cube.transform.position + inSpot3;
+            x4.transform.localScale = spotCubeSize;
+            print(mult1);
+            print(mult2);
+            print(mult3);
+        }
+        
+    }
+
+    // Update is called once per frame
+    void Update()
+    {
+        
+    }
+}
