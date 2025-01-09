@@ -1,0 +1,76 @@
+using System.Collections;
+using System.Collections.Generic;
+using System.Security.Cryptography.X509Certificates;
+using UnityEditor;
+using UnityEngine;
+using UnityEngine.EventSystems;
+using UnityEngine.SocialPlatforms;
+
+public class Test : MonoBehaviour
+{
+    [SerializeField] Vector3 originSpot;
+    [SerializeField] float height;
+    [SerializeField] float radius;
+    [SerializeField] float slope;
+    [SerializeField] Vector3 spotCubeSize;
+    [SerializeField] GameObject obj;
+    private GameObject cube;
+    // Start is called before the first frame update
+    void Start()
+    {
+        cube = GameObject.CreatePrimitive(PrimitiveType.Capsule);
+        cube.transform.eulerAngles = new Vector3(slope, 0, 0);
+        cube.transform.position = originSpot;
+        // cube.transform.localScale = new Vector3(1, 1, 10);
+        radius = Mathf.Clamp(radius, 0, height/2);
+        RaycastHit hit;
+        Physics.Raycast(originSpot + new Vector3(0, 9999, 0), Vector3.down, out hit, Mathf.Infinity);
+        Debug.DrawRay(originSpot + new Vector3(0, 9999, 0), Vector3.down * 9999, Color.white, Mathf.Infinity);
+        Mesh localMesh = cube.GetComponent<MeshFilter>().mesh;
+        List<Vector3> testVertices = new List<Vector3>();
+        for (int i = 0; i < localMesh.triangles.Length; i += 3){
+            testVertices.Add(localMesh.vertices[localMesh.triangles[i]]);
+            testVertices.Add(localMesh.vertices[localMesh.triangles[i+1]]);
+            testVertices.Add(localMesh.vertices[localMesh.triangles[i+2]]);
+            Vector3 Pos1 = VectorMult(localMesh.vertices[localMesh.triangles[i]], cube.transform.localScale);
+            Vector3 Pos2 = VectorMult(localMesh.vertices[localMesh.triangles[i+1]], cube.transform.localScale);
+            Vector3 Pos3 = VectorMult(localMesh.vertices[localMesh.triangles[i+2]], cube.transform.localScale);
+            Vector3 PosFinal = new Vector3((Pos1.x + Pos2.x + Pos3.x)/3, (Pos1.y + Pos2.y + Pos3.y)/3, (Pos1.z + Pos2.z + Pos3.z)/3);
+            float mult1 = Mathf.Min((PosFinal-Pos1).magnitude, radius);
+            float mult2 = Mathf.Min((PosFinal-Pos2).magnitude, radius);
+            float mult3 = Mathf.Min((PosFinal-Pos3).magnitude, radius);
+            Vector3 inSpot1 = Pos1 + (PosFinal-Pos1).normalized*mult1;
+            Vector3 inSpot2 = Pos2 + (PosFinal-Pos2).normalized*mult2;
+            Vector3 inSpot3 = Pos3 + (PosFinal-Pos3).normalized*mult3;
+            Vector3 norm = threePointNormal(inSpot1, inSpot2, inSpot3).normalized;
+            print(norm);
+            float normAngle = VectorAngle(Vector3.zero, Vector3.zero + norm);
+            Debug.DrawLine(PosFinal, PosFinal+norm, Color.white, Mathf.Infinity);
+            switch (Mathf.Abs(normAngle)){
+                case 90:
+                    print("90");
+                    Debug.DrawLine(cube.transform.position + PosFinal + Vector3.up*radius, cube.transform.position + PosFinal + Vector3.up*(radius+height), Color.blue, Mathf.Infinity);
+                    // Debug.DrawLine(cube.transform.position + PosFinal + Vector3.up * (radius + (height-2*radius)/2), cube.transform.position + PosFinal + Vector3.up * (radius + (height-2*radius)/2) + Vector3.right, Color.blue, Mathf.Infinity);
+                    break;
+                case 0:
+                    print("0");
+                    break;
+                default:
+                    print("default");
+                    Debug.DrawLine(cube.transform.position + PosFinal + new Vector3(0, Mathf.Abs((Mathf.Tan(normAngle * Mathf.Deg2Rad)/Mathf.Sin(normAngle * Mathf.Deg2Rad))*radius) + ((height-2*radius)/2), 0), cube.transform.position + PosFinal + new Vector3(1, Mathf.Abs((Mathf.Tan(normAngle * Mathf.Deg2Rad)/Mathf.Sin(normAngle * Mathf.Deg2Rad))*radius) + ((height-2*radius)/2), 0), Color.red, Mathf.Infinity);
+                    break;
+            }
+        }
+    }
+    
+    Vector3 threePointNormal(Vector3 a, Vector3 b, Vector3 c){
+        return Vector3.Cross(b - a, c - a).normalized;
+    }
+    Vector3 VectorMult(Vector3 a, Vector3 b){
+        return new Vector3(a.x * b.x, a.y*b.y, a.z*b.z);
+    }
+    // returns a value 90 to -90
+    public float VectorAngle(Vector3 to, Vector3 from){
+        return Mathf.Atan2(to.y - from.y, Mathf.Sqrt(Mathf.Pow(to.x - from.x, 2) + Mathf.Pow(to.z - from.z, 2))) * Mathf.Rad2Deg;
+    }
+}
